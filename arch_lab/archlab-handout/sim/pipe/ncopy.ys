@@ -16,23 +16,65 @@ ncopy:
 ##################################################################
 # You can modify this portion
 	# Loop header
-	xorq %rax,%rax		# count = 0;
-	andq %rdx,%rdx		# len <= 0?
-	jle Done		# if so, goto Done:
+	irmovq $0, %rax		# count = 0;
+        irmovq $1, %r10         # keep %r10 be 1
+        #irmovq $2, %r11         # keep %r11 be 2
+        #irmovq $16, %r12        # keep %r12 be 16
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+	#andq %rdx,%rdx		# len <= 0?
+	#jle Done		# if so, goto Done:
+        
+       
+#Test:   rrmovq %rdx, %rbx
+
+Test:   subq %r10, %rdx         # do: len-1, test: (len-1) <= 0?  =>  len <= 1?
+       
+        # try jg instruction first, to avoid branch mispredict
+	jg Loop
+        jle Odd                 # if len <= 1, goto Odd:
+#       jl Done                 # don't put jl instruction here to reduce instruction counts in Test section
+
+Loop:	mrmovq (%rdi), %r14	# read val from src
+        mrmovq 8(%rdi), %r13    # read val2 from src+1
+        # delay mov %r14 to memory to avoid data hazards
+	
+        #rmmovq %r14, (%rsi)	# store val to dst
+        #rmmovq %r13, 8(%rsi)    # store val2 to dst+1
+
+        irmovq $0, %r8
+        irmovq $0, %r9
+	andq %r14, %r14		# val > 0?
+	cmovg %r10, %r8
+        andq %r13, %r13         # val2 > 0?
+        cmovg %r10, %r9
+
+        rmmovq %r14, (%rsi)	# store val to dst
+        rmmovq %r13, 8(%rsi)    # store val2 to dst+1
+
+        addq %r8, %rax          # count add 0 or 1
+        addq %r9, %rax          # count add 0 or 1
+
+
+
+Npos:	subq %r10, %rdx		# len -= 2
+
+	iaddq $16, %rdi         # src += 2
+	iaddq $16, %rsi		# dst += 2
+
+        #jmp Test                # goto Test
+        subq %r10, %rdx
+        jg Loop
+
+
+Odd:
+        jl Done                # if len < 0 here, means len == 0 in Test section, goto Done:
+
+        # else, len == 1
+        mrmovq (%rdi), %r14
+        rmmovq %r14, (%rsi)
+        andq %r14, %r14         # val <= 0?
+        jle Done                # if so, goto Done:
+        iaddq $1, %rax         # else, count++
 ##################################################################
 # Do not modify the following section of code
 # Function epilogue.
