@@ -311,9 +311,7 @@ int cache_replace (uint64_t** set, uint64_t tag)
 void cache_op_sim (uint64_t*** cache, char op, uint64_t address, int size, 
 		int* hit, int* miss, int* evi)
 {
-
-    int tag_bit_len = ADDR_BITS - s - b;
-    
+ 
     uint64_t base = -1;
     uint64_t tag_mask = base << (s + b);
     uint64_t set_mask = (~ tag_mask) >> b;
