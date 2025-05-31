@@ -152,32 +152,14 @@ static void* insert_block_to_list(void* bp)
 
     // 1. find proper list for block
     list_head = 0;
-    size_t t_size = size >> 5;
-
-    while (t_size > 0)
-    {
-        t_size = t_size >> 1;
-	list_head += 1;
-    }
-
-    if ((size ^ (1 << (list_head+4))) > 0)
-    {
-        list_head += 1;
-    }
-
-
-    if (list_head >= LISTS_ARRAY_SIZE)
-    {
-        list_head = LISTS_ARRAY_SIZE - 1;
-    }
+    list_head = find_proper_block_list(size);
 
 
     // 2. initialize pred/succ pointer
     PUT(PRED_ADDR(bp), list_head);
 
     old_bp = list_array[list_head];
-    PUT(SUCC_ADDR(bp), old_bp);
-    
+    PUT(SUCC_ADDR(bp), old_bp);    
 
 
     // 3. insert block to list
@@ -251,26 +233,9 @@ static void *find_fit(size_t asize)
 
     // 1. find proper list for block
     list_head = 0;
-    size_t t_size = size >> 5;
+    list_head = find_proper_block_list(size);
 
-    while (t_size > 0)
-    {
-        t_size = t_size >> 1;
-	list_head += 1;
-    }
 
-    if ((size ^ (1 << (list_head+4))) > 0)
-    {
-        list_head += 1;
-    }
-
-    /* the upper bound of block size in last list is almost infinity, so search*/
-    if (list_head  >= LISTS_ARRAY_SIZE)
-    {
-        list_head = LISTS_ARRAY_SIZE - 1;
-    }
-
- 
     find = 0;
     bp = NULL;
     while (!find 
