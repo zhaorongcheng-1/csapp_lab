@@ -110,7 +110,35 @@ static char* list_array[LISTS_ARRAY_SIZE];
 static char* heap_listp;
 
 
+static int find_proper_block_list(size_t size)
+{
+    int list_head = 0;
 
+
+    // 1. find proper list for block
+    size_t t_size = size >> 5;
+
+    while (t_size > 0)
+    {
+        t_size = t_size >> 1;
+	list_head += 1;
+    }
+
+    if ((size ^ (1 << (list_head+4))) > 0)
+    {
+        list_head += 1;
+    }
+
+
+    if (list_head >= LISTS_ARRAY_SIZE)
+    {
+        list_head = LISTS_ARRAY_SIZE - 1;
+    }
+
+
+    return list_head;
+
+}
 
 
 
@@ -122,7 +150,6 @@ static void* insert_block_to_list(void* bp)
     
     char* old_bp;
 
-    
     // 1. find proper list for block
     list_head = 0;
     size_t t_size = size >> 5;
@@ -222,7 +249,6 @@ static void *find_fit(size_t asize)
     size_t b_size;
     int find;
 
-
     // 1. find proper list for block
     list_head = 0;
     size_t t_size = size >> 5;
@@ -236,6 +262,12 @@ static void *find_fit(size_t asize)
     if ((size ^ (1 << (list_head+4))) > 0)
     {
         list_head += 1;
+    }
+
+    /* the upper bound of block size in last list is almost infinity, so search*/
+    if (list_head  >= LISTS_ARRAY_SIZE)
+    {
+        list_head = LISTS_ARRAY_SIZE - 1;
     }
 
  
