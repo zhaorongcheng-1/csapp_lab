@@ -512,6 +512,112 @@ void mm_free(void *ptr)
     insert_block_to_list(new_bp);
 }
 
+
+static void* realloc_extend(void* bp, size_t new_asize)
+{
+    void* newptr;
+
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t next_size = GET_SIZE(HDRP(NEXT_BLKP(bp)));
+
+    size_t bp_size = GET_SIZE(HDRP(bp));
+
+
+    void* l_bp;
+    size_t l_size;
+
+
+    if (!next_alloc && (bp_size + next_size) >= new_asize)
+    {
+	pick_block_from_list(NEXT_BLKP(bp));
+
+
+	l_size = bp_size + next_size - new_asize;
+	// splitting
+        if (l_size >= (2 * DSIZE))
+	{
+	    PUT(HDRP(bp), PACK(new_asize, 1));
+	    PUT(FTRP(bp), PACK(new_asize, 1));
+
+
+	    l_bp = NEXT_BLKP(bp);
+	    PUT(HDRP(l_bp), PACK(l_size, 0));
+	    PUT(FTRP(l_bp), PACK(l_size, 0));
+
+
+	    insert_block_to_list(l_bp);
+
+	}
+	// not splitting
+	else
+	{
+	    PUT(HDRP(bp), PACK((bp_size + next_size), 1));
+	    PUT(FTRP(bp), PACK((bp_size + next_size), 1));
+
+	}
+
+	newptr  = bp;
+    
+    }
+    else
+    {
+        newptr = mm_malloc(new_asize - DSIZE);
+    }
+
+
+
+    return newptr;
+
+}
+
+static void* realloc_reduce(void* bp, size_t new_asize)
+{
+    void* newptr;
+
+    size_t bp_size = GET_SIZE(HDRP(bp));
+
+
+    void* l_bp;
+    size_t l_size = bp_size - new_asize;
+
+    // splitting
+    if (l_size >= (2*DSIZE))
+    {
+
+	    PUT(HDRP(bp), PACK(new_asize, 1));
+	    PUT(FTRP(bp), PACK(new_asize, 1));
+
+
+	    l_bp = NEXT_BLKP(bp);
+	    PUT(HDRP(l_bp), PACK(l_size, 0));
+	    PUT(FTRP(l_bp), PACK(l_size, 0));
+
+
+	    l_bp = coalesce(l_bp);
+
+
+	    insert_block_to_list(l_bp);
+    
+    }
+
+    // not splitting
+    else
+    {
+	// do nothing
+    }
+
+    newptr = bp;
+
+    return newptr;
+
+}
+
+
+
+
+
+
+
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
@@ -520,15 +626,73 @@ void *mm_realloc(void *ptr, size_t size)
     void *oldptr = ptr;
     void *newptr;
     size_t copySize;
+
+    size_t old_asize;
+    size_t new_asize;
+
     
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
-      return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    if (size < copySize)
-      copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
+    /* 1. size is 0, try free */
+    if (size == 0)
+    {
+        if (ptr != NULL)
+	{
+	    mm_free(ptr);
+	}
+	
+	return NULL;
+    }
+
+
+
+    /* 2. ptr is NULL, but size is not 0, do malloc */
+    if (ptr == NULL)
+    {
+        return mm_malloc(size);
+    }
+
+
+
+    /* 3. block size need extend or reduce */
+    old_asize = GET_SIZE(HDRP(oldptr));
+
+    if (size <= DSIZE)
+    {
+        new_asize = 2*DSIZE;
+    }
+    else
+    {
+        new_asize = DSIZE * ((size + DSIZE + (DSIZE-1)) / DSIZE);
+    }
+
+
+
+    if (old_asize == new_asize)
+    {
+        return oldptr;
+    }
+    else if (old_asize < new_asize)
+    {
+        copySize = old_asize - DSIZE;
+	
+	newptr = realloc_extend(oldptr, new_asize);
+
+
+
+	if (newptr != oldptr)
+	{
+	    memcpy(newptr, oldptr, copySize);
+
+	    mm_free(oldptr);
+	}
+
+    }
+    else
+    {
+	newptr = realloc_reduce(oldptr, new_asize);
+
+    }
+
+
     return newptr;
 }
 
