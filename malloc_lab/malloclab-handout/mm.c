@@ -105,7 +105,9 @@ team_t team = {
  * list block size: {16}, {32}, {48-64}, {80-128}, {144-256}, ..., {2064-4096},  {4112- }
  * */
 
-static char* list_array[LISTS_ARRAY_SIZE];
+
+
+static void** list_array;
 
 static char* heap_listp;
 
@@ -412,6 +414,18 @@ int mm_init(void)
 {
     char* bp;
 
+    /* create and initial free block lists */
+    if ((list_array = mem_sbrk(LISTS_ARRAY_SIZE * WSIZE)) == (void*)-1)
+        return -1;
+
+    // TODO: initialize free block list
+    for (int i = 0; i < LISTS_ARRAY_SIZE; i++)
+    {
+        list_array[i] = 0;
+    }
+
+
+
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(4*WSIZE)) == (void*)-1)
         return -1;    
@@ -423,13 +437,7 @@ int mm_init(void)
 
     heap_listp += (2*WSIZE);
 
-    // TODO: initialize free block list
-    for (int i = 0; i < LISTS_ARRAY_SIZE; i++)
-    {
-        list_array[i] = 0;
-    }
-
-
+   
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if ((bp = extend_heap(CHUNKSIZE/WSIZE)) == NULL)
         return -1;
