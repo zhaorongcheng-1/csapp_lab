@@ -3,6 +3,8 @@
 #include "csapp.h"
 
 #include <string.h>
+#include <signal.h>
+
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -54,13 +56,22 @@ void forward_server_response_to_client(int client_connfd, int proxy_connfd);
 void do_it(int client_connfd);
 
 
+
+// handle connected tcp thread
+void* handle_thread(void* vargp);
+
+
 int main(int argc, char **argv)
 {
-    int listenfd, connfd;
+    int listenfd;
+    int* connfd_ptr;
+
     char clientname[MAXLINE], port[MAXLINE];
 
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
+
+    pthread_t tid;
 
 
     if (argc != 2) {
@@ -68,24 +79,53 @@ int main(int argc, char **argv)
 	exit(1);
     }
 
+    signal(SIGPIPE, SIG_IGN);
+
 
     listenfd = Open_listenfd(argv[1]);
+
     while(1) {
         clientlen = sizeof(clientaddr);
-	connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+	connfd_ptr = Malloc(sizeof(int));
+
+	*connfd_ptr = Accept(listenfd, (SA *)&clientaddr, &clientlen);
 
 	Getnameinfo((SA *)&clientaddr, clientlen, clientname, MAXLINE, port, MAXLINE, 0);
 	printf ("Proxy: Accept connection from (%s %s)\n", clientname, port);
 
-	do_it(connfd);
-
-	Close(connfd);
+	Pthread_create(&tid, NULL, handle_thread, connfd_ptr);
     
     }
 
 
     return 0;
 }
+
+
+
+void* handle_thread(void* vargp)
+{
+    int connfd = *((int*) vargp);
+    Pthread_detach(Pthread_self());
+    Free(vargp);
+
+    do_it(connfd);
+
+    Close(connfd);
+
+    return NULL;
+
+}
+
+
+
+
+
+
+
+
+
+
 
 
 

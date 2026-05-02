@@ -32,6 +32,11 @@
 void unix_error(char *msg) /* Unix-style error */
 {
     fprintf(stderr, "%s: %s\n", msg, strerror(errno));
+
+    if (errno == EPIPE)
+    {
+        Pthread_exit((void*)0);
+    }
     exit(0);
 }
 /* $end unixerror */
@@ -908,7 +913,10 @@ ssize_t Rio_readn(int fd, void *ptr, size_t nbytes)
 void Rio_writen(int fd, void *usrbuf, size_t n) 
 {
     if (rio_writen(fd, usrbuf, n) != n)
+    {
+	Close(fd);
 	unix_error("Rio_writen error");
+    }
 }
 
 void Rio_readinitb(rio_t *rp, int fd)
