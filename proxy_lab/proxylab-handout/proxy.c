@@ -5,6 +5,7 @@
 #include <string.h>
 #include <signal.h>
 
+#include "cache.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -21,6 +22,15 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 static const char *http_version = "HTTP/1.0";
 
 static const char* support_method = "GET";
+
+
+int readcnt;    /* Initially = 0 */
+sem_t mutex;    /* Initially = 1 */
+sem_t w;        /* initially = 1 */
+
+
+struct cache_s cache;
+
 
 
 // parse URL: http://hostname:port/path
@@ -49,7 +59,11 @@ void build_request_hdrs(char* forward_request, char* server_name);
 
 
 // forward server response to client
-void forward_server_response_to_client(int client_connfd, int proxy_connfd);
+size_t forward_server_response_to_client(int client_connfd, int proxy_connfd, char* response_body);
+
+
+// forward cache object to client
+void forward_cache_object_to_client(int client_connfd, struct item_s* item);
 
 
 // handle a connect from, process client HTTP request
@@ -80,6 +94,18 @@ int main(int argc, char **argv)
     }
 
     signal(SIGPIPE, SIG_IGN);
+
+
+    // init cache
+    init_cache(&cache);
+
+
+    readcnt = 0;
+
+    // init semaphore
+    Sem_init(&mutex, 0, 1);
+    Sem_init(&w, 0, 1);
+
 
 
     listenfd = Open_listenfd(argv[1]);
@@ -144,6 +170,13 @@ void do_it(int client_connfd)
     int proxy_connfd;
 
 
+    char item_key[MAXLINE];
+    struct item_s* item = NULL;
+
+    char response_body[MAX_OBJECT_SIZE];
+    size_t response_size = 0;
+
+
     Rio_readinitb(&client_rio, client_connfd);
 
     // read client HTTP request
@@ -180,7 +213,40 @@ void do_it(int client_connfd)
 
 
 
-    // 3. connect to Web server
+    // 3. try to find response in cache, if find, then reply and return
+
+    construct_key(item_key, server_name, port, path);
+    printf("KEY: {%s}\n", item_key);
+
+
+    P(&mutex);
+    readcnt++;
+    if (readcnt == 1)
+        P(&w);
+    V(&mutex);
+
+
+    item = find_item(&cache, item_key);
+
+
+    P(&mutex);
+    readcnt--;
+    if (readcnt == 0)
+        V(&w);
+    V(&mutex);
+
+
+    if (item != NULL)
+    {
+        printf("forward cache object\n");
+        forward_cache_object_to_client(client_connfd, item);
+
+	return;
+    }
+
+
+
+    // 4. connect to Web server
 
 #if 0
     printf("Try connect server %s port %s\n", server_name, port);
@@ -197,7 +263,7 @@ void do_it(int client_connfd)
 #endif
     
 
-    // 4. proxy build HTTP request to server
+    // 5. proxy build HTTP request to server
 
     memset(forward_request, 0, sizeof(forward_request));
     
@@ -211,15 +277,47 @@ void do_it(int client_connfd)
     printf("==== Sending to server ====\n");
 #endif
 
-    // 5. forward request to server
+    // 6. forward request to server
 
     Rio_writen(proxy_connfd, forward_request, strlen(forward_request));
 
-    // 6. forward server response to client
+    // 7. forward server response to client and try cache response
+
+    printf("forward server response\n");
+    response_size = forward_server_response_to_client(client_connfd, proxy_connfd, response_body);
+
+    if (response_size <= MAX_OBJECT_SIZE)
+    {
+	P(&w);
+	
+	// sleep thread to test concurrency and cache
+	usleep((rand() % 100) * 1000);
+	
+
+	// find item again
+	//printf ("find item AGAIN\n");
+	item = find_item(&cache, item_key);
+	if (item != NULL)
+	{
+	    V(&w);
+	    return;
+	}
+
+	usleep((rand() % 100) * 1000);
 
 
+        // cache
+	printf ("alloc item\n");
+	item = alloc_item(item_key, response_body, response_size);
+        
+	
+	printf ("lru evict\n");
+	lru_evict(&cache, item);
 
-    forward_server_response_to_client(client_connfd, proxy_connfd);
+
+	V(&w);
+    
+    }
 
 
     return;
@@ -390,9 +488,13 @@ void build_request_hdrs(char* forward_request, char* server_name)
 
 
 
-void forward_server_response_to_client(int client_connfd, int proxy_connfd)
+size_t forward_server_response_to_client(int client_connfd, int proxy_connfd, char* response_body)
 {
     size_t n;
+
+    size_t response_size = 0;
+
+    char* body_p = response_body;
 
     char buf[MAXLINE];
 
@@ -404,7 +506,14 @@ void forward_server_response_to_client(int client_connfd, int proxy_connfd)
 //    printf ("==== Server response ====\n");
 
     while((n = Rio_readlineb(&server_rio, buf, MAXLINE)) > 0) {
-	
+
+	response_size += n;
+
+	if (response_size <= MAX_OBJECT_SIZE)
+        {
+	    memcpy(body_p, buf, n);
+	    body_p += n;
+	}
 
 //	printf("%s", buf);
 
@@ -414,10 +523,20 @@ void forward_server_response_to_client(int client_connfd, int proxy_connfd)
 //    printf ("==== Server response ====\n");
 
 
-    return;
+    return response_size;
 
 }
 
+void forward_cache_object_to_client(int client_connfd, struct item_s* item)
+{
+    size_t n = item->body_size;
+
+    char* buf = item->body;
+
+
+    Rio_writen(client_connfd, buf, n);
+
+}
 
 
 
