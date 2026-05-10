@@ -206,6 +206,14 @@ void lru_evict(struct cache_s* cache, struct item_s* new_item)
 
     }
 
+    size_t new_cache_size = cache->current_size - victim->body_size + new_item->body_size;
+
+
+    if (new_cache_size > cache->max_size)
+    {
+        return;
+    }
+
 
     delete_item(cache, victim);
 
