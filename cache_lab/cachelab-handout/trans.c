@@ -48,13 +48,32 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
  * a simple one below to help you get started. 
  */ 
 
-
+/*
+ * cache, s = 5, E = 1, b = 5
+ *
+ * 32 cache Line
+ * every cache Line has 32 byte
+ *
+ * */
 
 
 
 
 
 char trans_3desc[] = "Simple row-wise scan transpose 8*8 read all line, solution for 32*32 transpose";
+
+/* 
+ * 32*32 matrix
+ * every matrix line have 32*4 = 128 byte, which takes 4(128/32) cache line 
+ * cache have 32 cache lines, So, 32/4 = 8, 8 matrix line will fill the cache,
+ * 
+ * So, when transpose, for 32*32 matrix
+ *
+ * we read most 8 matrix line to avoid cache conflicts.
+ *
+ * */
+
+
 void trans_3(int M, int N, int A[N][M], int B[M][N])
 {
     int i;
@@ -170,6 +189,22 @@ void trans_6(int M, int N, int A[N][M], int B[M][N])
     
    
 }
+
+
+
+
+/*
+ * 64*64 matrix
+ * every matrix line have 64*4 = 256 byte, which takes 8(256/32) cache line
+ * cache have 32 cache lines, 32/8 = 4, 4 matrix line will fill the cache,
+ * 
+ * So, when transpose, for 64*64 matrix
+ *
+ * we read most 4 matrix line to avoid cache conflicts.
+ *
+ * for 1 cache line, it hold 8 matrix elements, we use this when transpose
+ *
+ * */
 
 
 char trans_7desc[] = "Simple row-wise scan transpose 4*4 read all line, store A2 to B2, solution for 64*64 transpose";
