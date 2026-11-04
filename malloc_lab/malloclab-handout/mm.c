@@ -95,6 +95,27 @@ team_t team = {
  *
  * */
 
+/*
+ * Free block layout:
+ * every line is 32 bit
+ *          [ Block size(31)   | a/f ]  ---- Header
+ *     bp-> [ pred block pointer     ]  ---- User view Payload start
+ *          [ succ block pointer     ]
+ *          [ Payload                ]
+ *          [ ...                    ]
+ *          [ Payload                ]  ---- User view Payload end
+ *          [Padding(optional)       ]
+ *          [ Block size(31)   | a/f ]  --- Footer
+ *    The block size includes the header, payload, padding and the footer
+ *
+ * reference CSAPP.3rd book Figure 9.48(b)
+ *
+ * */
+
+
+
+
+
 
 /* 
  * Each free list is associated with a size class
